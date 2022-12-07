@@ -13,9 +13,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.datasets import load_diabetes
 from scipy.stats import wasserstein_distance
 
-
 RANDOM_STATE = 2137
 TEST_SIZE = 0.4
+
 
 class DataProcessor:
     def __init__(self, df=None, target=None, X=None, y=None, test_size=TEST_SIZE, random_state=RANDOM_STATE, to_drop=[],
@@ -45,6 +45,10 @@ class DataProcessor:
 
     def __preprocess_data(self):
         if self.df is None:
+            self.X = pd.DataFrame(self.X)
+            self.y = pd.DataFrame(self.y)
+            self.X.columns = self.X.columns.astype(str)
+            self.y.columns = self.y.columns.astype(str)
             return
 
         clean_df = self.df
@@ -58,6 +62,8 @@ class DataProcessor:
             clean_df = clean_df.drop(cat, axis=1)
         if self.to_one_hot:
             clean_df = pd.get_dummies(clean_df, columns=self.to_one_hot)
+
+        clean_df.columns = clean_df.columns.astype(str)
         self.clean_df = clean_df
 
     def __split_data(self):
@@ -124,6 +130,11 @@ class Experiment:
         k_vals = np.sum(X * y, axis=1)
         return (k_vals + 1) ** degree
 
+    @staticmethod
+    def kernel_gaussian(y, X, gamma=1):
+        k_vals = np.sum((X - y) ** 2, axis=1)
+        return np.exp(-gamma * k_vals / 2)
+
     def __calc_shap(self, data, name):
         shap_exp = self.shap_class(self.model, data=data, **self.shap_params)
         shap_sv = self.__timeit(fun=shap_exp, params=[data], name=name, attribute="values")
@@ -138,10 +149,8 @@ class Experiment:
         pvi_ = self.__timeit(fun=dx_exp.model_parts, named_params=self.pvi_params, name=name)
         pvi = pvi_.result.iloc[1:X.shape[1], :].sort_values(
             'variable').dropout_loss  # 1d permutational variable importance
-        # most_important_variable = pvi_.result[~pvi_.result.variable.isin(['_baseline_', '_full_model_'])].variable.iloc[
-        #     -1]
-        most_important_variable = pvi_.result[~pvi_.result.variable.isin(['_baseline_', '_full_model_'])].variable.iloc[-1]
-        # most_important_variable = pvi_.result.variable[(X.shape[1])]
+        most_important_variable = pvi_.result[~pvi_.result.variable.isin(['_baseline_', '_full_model_'])].variable.iloc[
+            -1]
         variable_splits = {most_important_variable: np.linspace(X[most_important_variable].min(),
                                                                 X[most_important_variable].max(),
                                                                 num=self.pdp_domain)}
@@ -175,12 +184,12 @@ class Experiment:
         return np.sum([wasserstein_distance(X[:, i], X_compressed[:, i]) for i in range(X.shape[1])])
 
     @staticmethod
-    def exp_results_to_df(df, base_metrics, random_metrics, compressed_metrics, times, seed):
+    def exp_results_to_df(df, base_metrics, random_metrics, compressed_metrics, times, seed, model_metric):
         def calculate_diffs(exp_name, metric_key):
             return {f"{exp_name}_random": np.sum(np.abs(base_metrics[metric_key] - random_metrics[metric_key])),
                     f"{exp_name}_compressed": np.sum(np.abs(base_metrics[metric_key] - compressed_metrics[metric_key]))}
 
-        next_row = {'model_performance': base_metrics['dx_exp'].model_performance().result.accuracy.values[0]}
+        next_row = {'model_performance': base_metrics['dx_exp'].model_performance().result[model_metric].values[0]}
 
         # metric diffs
         for exp_name, metric_key in [('svi', 'shap_svi'), ('pvi', 'pvi'), ('pdp', 'pdp'), ('ale', 'ale')]:
@@ -201,8 +210,10 @@ class Experiment:
 
         # distances
         next_row.update({
-            'wd_random': Experiment.compute_wasserstein_distance(base_metrics['X'].to_numpy(), random_metrics['X'].to_numpy()),
-            'wd_compressed': Experiment.compute_wasserstein_distance(base_metrics['X'].to_numpy(), compressed_metrics['X'].to_numpy()),
+            'wd_random': Experiment.compute_wasserstein_distance(base_metrics['X'].to_numpy(),
+                                                                 random_metrics['X'].to_numpy()),
+            'wd_compressed': Experiment.compute_wasserstein_distance(base_metrics['X'].to_numpy(),
+                                                                     compressed_metrics['X'].to_numpy()),
             'sv_wd_random': Experiment.compute_wasserstein_distance(base_metrics['shap_sv'], random_metrics['shap_sv']),
             'sv_wd_compressed': Experiment.compute_wasserstein_distance(base_metrics['shap_sv'],
                                                                         compressed_metrics['shap_sv']),
@@ -212,7 +223,8 @@ class Experiment:
         df_longer = pd.concat([df, new_row])
         return df_longer
 
-    def run(self, no_tests, kernel, no_halving_rounds=1, compress_oversampling=0, test_size=4 ** 7, save_path=None):
+    def run(self, no_tests, kernel, no_halving_rounds=1, compress_oversampling=0,
+            test_size=4 ** 7, save_path=None, model_metric='accuracy'):
         X, y = self.data_processor.X_test.iloc[0:test_size, :], self.data_processor.y_test.iloc[0:test_size]
         # X = X.reset_index(drop=True)
         # y = y.reset_index(drop=True)
@@ -249,7 +261,8 @@ class Experiment:
                 random_metrics=random_metrics,
                 compressed_metrics=compressed_metrics,
                 times=self.times,
-                seed=seed
+                seed=seed,
+                model_metric=model_metric
             )
 
         if save_path is not None:
