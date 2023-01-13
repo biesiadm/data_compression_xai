@@ -83,7 +83,7 @@ class DataProcessor:
 
 class Experiment:
     def __init__(self, data_processor, model_class, model_params,
-                 shap_class, shap_params, dalex_class, dalex_params,
+                 shap_class, is_tree, shap_params, dalex_class, dalex_params,
                  pvi_params, pdp_params, ale_params, pdp_domain=51):
         if pdp_params is None:
             pdp_params = {
@@ -94,6 +94,7 @@ class Experiment:
         self.model_class = model_class
         self.model_params = model_params
         self.shap_class = shap_class
+        self.is_tree = is_tree
         self.shap_params = shap_params
         self.dalex_class = dalex_class
         self.dalex_params = dalex_params
@@ -136,7 +137,12 @@ class Experiment:
         return np.exp(-gamma * k_vals / 2)
 
     def __calc_shap(self, data, name):
-        shap_exp = self.shap_class(self.model, data=data, **self.shap_params)
+
+        if self.is_tree:
+            shap_exp = self.shap_class(self.model, data=data, **self.shap_params)
+        else:
+            masker = shap.maskers.Independent(data = self.data_processor.X_train)
+            shap_exp = self.shap_class(self.model.predict, masker, **self.shap_params)
         shap_sv = self.__timeit(fun=shap_exp, params=[data], name=name, attribute="values")
         shap_svi = np.absolute(shap_sv).mean(axis=0)
 

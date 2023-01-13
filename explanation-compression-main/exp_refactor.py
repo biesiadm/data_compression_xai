@@ -3,7 +3,7 @@ import shap
 import dalex as dx
 import xgboost as xgb
 from sklearn.datasets import load_diabetes, make_friedman1
-
+from sklearn.neighbors import KNeighborsRegressor
 from exp_utils import DataProcessor, Experiment
 
 VERBOSE = False
@@ -15,11 +15,11 @@ def experiment_1(no_tests=10, save_path='./results/exp1_diabetes.parquet', model
 
     experiment_settings = {
         'data_processor': data_processor,
-        'model_class': xgb.XGBRegressor,
-        'model_params': {'max_depth': 4, 'subsample': 0.9 ** 3, 'colsample_bytree': 0.9, 'colsample_bylevel': 0.9,
-                         'colsample_bynode': 0.9, 'alpha': 0.1},
-        'shap_class': shap.explainers.Tree,
-        'shap_params': {'model_output': "raw"},
+        'model_class': KNeighborsRegressor,
+        'model_params': {},#{'max_depth': 4, 'subsample': 0.9 ** 3, 'colsample_bytree': 0.9, 'colsample_bylevel': 0.9,'colsample_bynode': 0.9, 'alpha': 0.1},
+        'shap_class': shap.Explainer,
+        'is_tree': True,
+        'shap_params': {},#{'model_output': "raw"},
         'dalex_class': dx.Explainer,
         'dalex_params': {'verbose': VERBOSE},
         'pvi_params': {'N': None, 'verbose': VERBOSE},
@@ -86,9 +86,7 @@ def experiment_4(no_tests=10, save_path='./results/expFriedman_xgb.parquet', mod
 
 
 experiments = [
-    experiment_1,
-    experiment_3,
-    experiment_4,
+    experiment_1
 
 ]
 
