@@ -170,12 +170,15 @@ class Experiment:
         return pdp_ale_.result[['_yhat_']].to_numpy()
 
     def __calculate_metrics(self, X, y, name_suffix):
+        print('calculating shap:')
         shap_exp, shap_sv, shap_svi = self.__calc_shap(X, name="sv_" + name_suffix)
         dx_exp = self.__get_dx(X, y)
-
+        print('calculating pvi:')
         pvi, most_important_variable, variable_splits = self.__calc_pvi(dx_exp, X, "pvi_" + name_suffix)
+        print('calculating pdp:')
         pdp = self.__calc_pdp_ale(dx_exp, self.pdp_params, most_important_variable, variable_splits,
                                   "pdp_" + name_suffix)
+        print('calculating ale:')
         ale = self.__calc_pdp_ale(dx_exp, self.ale_params, most_important_variable, variable_splits,
                                   "ale_" + name_suffix)
 
@@ -194,8 +197,9 @@ class Experiment:
         def calculate_diffs(exp_name, metric_key):
             return {f"{exp_name}_random": np.sum(np.abs(base_metrics[metric_key] - random_metrics[metric_key])),
                     f"{exp_name}_compressed": np.sum(np.abs(base_metrics[metric_key] - compressed_metrics[metric_key]))}
-
+        
         next_row = {'model_performance': base_metrics['dx_exp'].model_performance().result[model_metric].values[0]}
+        #problem above: dalex explainer does not properly do inferention
 
         # metric diffs
         for exp_name, metric_key in [('svi', 'shap_svi'), ('pvi', 'pvi'), ('pdp', 'pdp'), ('ale', 'ale')]:
@@ -236,9 +240,9 @@ class Experiment:
         # y = y.reset_index(drop=True)
         exp_results = pd.DataFrame()
 
-        for seed in tqdm(range(no_tests)):
+        for seed in range(no_tests):
             np.random.seed(seed)
-
+            
             f_halve = lambda x: kt.thin(
                 X=x,
                 m=no_halving_rounds,
@@ -248,7 +252,7 @@ class Experiment:
                 seed=seed,
                 unique=True
             )
-
+            
             ids_compressed = self.__timeit(fun=compress.compress, params=[X.to_numpy()],
                                            named_params={'halve': f_halve, 'g': compress_oversampling},
                                            name='compression_time')
@@ -270,6 +274,7 @@ class Experiment:
                 seed=seed,
                 model_metric=model_metric
             )
+            print('after compressing')
 
         if save_path is not None:
             exp_results.to_parquet(save_path)
