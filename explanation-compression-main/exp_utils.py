@@ -83,12 +83,13 @@ class DataProcessor:
 
 class Experiment:
     def __init__(self, data_processor, model_class, model_params,
-                 shap_class=None, shap_params=None, dalex_class=None, dalex_params=None,
+                 shap_class=None, is_tree=True, shap_params=None, dalex_class=None, dalex_params=None,
                  pvi_params=None, pdp_params=None, ale_params=None, pdp_domain=51):
         self.data_processor = data_processor
         self.model_class = model_class
         self.model_params = model_params
         self.shap_class = shap_class
+        self.is_tree = is_tree
         self.shap_params = shap_params
         self.dalex_class = dalex_class
         self.dalex_params = dalex_params
@@ -140,7 +141,12 @@ class Experiment:
         if self.shap_class is None:
             return {}
 
-        shap_exp = self.shap_class(self.model, data=data, **self.shap_params)
+
+        if self.is_tree:
+            shap_exp = self.shap_class(self.model, data=data, **self.shap_params)
+        else:
+            masker = shap.maskers.Independent(data = self.data_processor.X_train)
+            shap_exp = self.shap_class(self.model.predict, masker, **self.shap_params)
         shap_sv = self.__timeit(fun=shap_exp, args=[data], name=name, attribute="values")
         shap_svi = np.absolute(shap_sv).mean(axis=0)
 
@@ -253,9 +259,9 @@ class Experiment:
         # y = y.reset_index(drop=True)
         exp_results = pd.DataFrame()
 
-        for seed in tqdm(range(no_tests)):
+        for seed in range(no_tests):
             np.random.seed(seed)
-
+            
             f_halve = lambda x: kt.thin(
                 X=x,
                 m=no_halving_rounds,
@@ -287,6 +293,7 @@ class Experiment:
                 seed=seed,
                 model_metric=model_metric
             )
+            print('after compressing')
 
         if save_path is not None:
             exp_results.to_parquet(save_path)
