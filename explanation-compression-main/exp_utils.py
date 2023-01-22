@@ -83,13 +83,8 @@ class DataProcessor:
 
 class Experiment:
     def __init__(self, data_processor, model_class, model_params,
-                 shap_class, shap_params, dalex_class, dalex_params,
-                 pvi_params, pdp_params, ale_params, pdp_domain=51):
-        if pdp_params is None:
-            pdp_params = {
-                'N': None,
-                'verbose': False
-            }
+                 shap_class=None, shap_params=None, dalex_class=None, dalex_params=None,
+                 pvi_params=None, pdp_params=None, ale_params=None, pdp_domain=51):
         self.data_processor = data_processor
         self.model_class = model_class
         self.model_params = model_params
@@ -109,6 +104,12 @@ class Experiment:
 
         self.base_metrics = None
 
+        assert self.shap_class is None or self.shap_params is not None, "You can't pass shap_class without shap_params"  # class => params
+        assert self.dalex_class is None or self.dalex_params is not None, "You can't pass dalex_class without dalex_params"  # class => params
+        assert self.pvi_params is None or self.dalex_class is not None, "You can't pass pvi_params without dalex"
+        assert self.pdp_params is None or self.pvi_params is not None, "You can't pass pdp_params without pvi"
+        assert self.ale_params is None or self.pvi_params is not None, "You can't pass ale_params without pvi"
+
         self.__create_train_model()
         self.__calculate_baseline()
 
@@ -116,9 +117,9 @@ class Experiment:
         self.model = self.model_class(**self.model_params)
         self.model.fit(self.data_processor.X_train, self.data_processor.y_train)
 
-    def __timeit(self, fun, params=[], named_params={}, name="", attribute=None):
+    def __timeit(self, fun, args=[], kwargs={}, name="", attribute=None):
         st = time.time()
-        ret = getattr(fun(*params, **named_params), attribute) if attribute else fun(*params, **named_params)
+        ret = getattr(fun(*args, **kwargs), attribute) if attribute else fun(*args, **kwargs)
         et = time.time()
 
         self.times[name] = et - st
@@ -136,17 +137,23 @@ class Experiment:
         return np.exp(-gamma * k_vals / 2)
 
     def __calc_shap(self, data, name):
+        if self.shap_class is None:
+            return {}
+
         shap_exp = self.shap_class(self.model, data=data, **self.shap_params)
-        shap_sv = self.__timeit(fun=shap_exp, params=[data], name=name, attribute="values")
+        shap_sv = self.__timeit(fun=shap_exp, args=[data], name=name, attribute="values")
         shap_svi = np.absolute(shap_sv).mean(axis=0)
 
-        return shap_exp, shap_sv, shap_svi
+        return {"shap_exp": shap_exp, "shap_sv": shap_sv, "shap_svi": shap_svi}
 
     def __get_dx(self, X, y):
         return self.dalex_class(self.model, X, y, **self.dalex_params)
 
     def __calc_pvi(self, dx_exp, X, name):
-        pvi_ = self.__timeit(fun=dx_exp.model_parts, named_params=self.pvi_params, name=name)
+        if self.pvi_params is None:
+            return {}, None, None
+
+        pvi_ = self.__timeit(fun=dx_exp.model_parts, kwargs=self.pvi_params, name=name)
         pvi = pvi_.result.iloc[1:X.shape[1], :].sort_values(
             'variable').dropout_loss  # 1d permutational variable importance
         most_important_variable = pvi_.result[~pvi_.result.variable.isin(['_baseline_', '_full_model_'])].variable.iloc[
@@ -155,29 +162,45 @@ class Experiment:
                                                                 X[most_important_variable].max(),
                                                                 num=self.pdp_domain)}
 
-        return pvi, most_important_variable, variable_splits
+        return {"pvi": pvi}, most_important_variable, variable_splits
+
+    def __calc_pdp(self, dx_exp, most_important_variable, variable_splits, name):
+        if self.pdp_params is None:
+            return {}
+
+        return {"pdp": self.__calc_pdp_ale(dx_exp, self.pdp_params, most_important_variable, variable_splits, name)}
+
+    def __calc_ale(self, dx_exp, most_important_variable, variable_splits, name):
+        if self.ale_params is None:
+            return {}
+
+        return {"ale": self.__calc_pdp_ale(dx_exp, self.ale_params, most_important_variable, variable_splits, name)}
 
     def __calc_pdp_ale(self, dx_exp, params, most_important_variable, variable_splits, name):
         pdp_ale_ = self.__timeit(fun=dx_exp.model_profile,
-                                 named_params=dict(params, **{'variables': most_important_variable,
-                                                              'variable_splits': variable_splits}), name=name)
+                                 kwargs=dict(params, **{'variables': most_important_variable,
+                                                        'variable_splits': variable_splits}), name=name)
         return pdp_ale_.result[['_yhat_']].to_numpy()
 
     def __calculate_metrics(self, X, y, name_suffix):
-        shap_exp, shap_sv, shap_svi = self.__calc_shap(X, name="sv_" + name_suffix)
+        sample_metrics = {'X': X, 'y': y}
+        sample_metrics.update(self.__calc_shap(X, f"sv_{name_suffix}"))
+
+        if self.dalex_class is None:
+            return sample_metrics
+
         dx_exp = self.__get_dx(X, y)
+        sample_metrics["dx_exp"] = dx_exp
 
-        pvi, most_important_variable, variable_splits = self.__calc_pvi(dx_exp, X, "pvi_" + name_suffix)
-        pdp = self.__calc_pdp_ale(dx_exp, self.pdp_params, most_important_variable, variable_splits,
-                                  "pdp_" + name_suffix)
-        ale = self.__calc_pdp_ale(dx_exp, self.ale_params, most_important_variable, variable_splits,
-                                  "ale_" + name_suffix)
+        pvi, most_important_variable, variable_splits = self.__calc_pvi(dx_exp, X, f"pvi_{name_suffix}")
+        sample_metrics.update(pvi)
+        sample_metrics.update(self.__calc_pdp(dx_exp, most_important_variable, variable_splits, f"pdp_{name_suffix}"))
+        sample_metrics.update(self.__calc_ale(dx_exp, most_important_variable, variable_splits, f"ale_{name_suffix}"))
 
-        return {'X': X, 'y': y, 'shap_exp': shap_exp, 'shap_sv': shap_sv,
-                'shap_svi': shap_svi, 'dx_exp': dx_exp, 'pvi': pvi, 'pdp': pdp, 'ale': ale}
+        return sample_metrics
 
     def __calculate_baseline(self):
-        self.base_metrics = self.__calculate_metrics(self.data_processor.X_test, self.data_processor.y_test, "base")
+        self.base_metrics = self.__calculate_metrics(self.data_processor.X_test, self.data_processor.y_test, "all")
 
     @staticmethod
     def compute_wasserstein_distance(X, X_compressed):
@@ -186,38 +209,38 @@ class Experiment:
     @staticmethod
     def exp_results_to_df(df, base_metrics, random_metrics, compressed_metrics, times, seed, model_metric):
         def calculate_diffs(exp_name, metric_key):
+            if metric_key not in base_metrics:
+                return {}
+
             return {f"{exp_name}_random": np.sum(np.abs(base_metrics[metric_key] - random_metrics[metric_key])),
                     f"{exp_name}_compressed": np.sum(np.abs(base_metrics[metric_key] - compressed_metrics[metric_key]))}
 
-        next_row = {'model_performance': base_metrics['dx_exp'].model_performance().result[model_metric].values[0]}
+        next_row = {}
+
+        if "dx_exp" in base_metrics:
+            next_row.update({'model_performance': base_metrics['dx_exp'].model_performance().result[model_metric].values[0]})
 
         # metric diffs
         for exp_name, metric_key in [('svi', 'shap_svi'), ('pvi', 'pvi'), ('pdp', 'pdp'), ('ale', 'ale')]:
             next_row.update(calculate_diffs(exp_name, metric_key))
 
         # time
-        next_row.update({
-            'time_kt': times['compression_time'],
-            'time_sv_all': times['sv_base'],
-            'time_sv_compressed': times['sv_compressed'],
-            'time_pvi_all': times['pvi_base'],
-            'time_pvi_compressed': times['pvi_compressed'],
-            'time_pdp_all': times['pdp_base'],
-            'time_pdp_compressed': times['pdp_compressed'],
-            'time_ale_all': times['ale_base'],
-            'time_ale_compressed': times['ale_compressed']
-        })
+        next_row.update({f"time_{k}": v for k, v in times.items()})
 
         # distances
         next_row.update({
             'wd_random': Experiment.compute_wasserstein_distance(base_metrics['X'].to_numpy(),
                                                                  random_metrics['X'].to_numpy()),
             'wd_compressed': Experiment.compute_wasserstein_distance(base_metrics['X'].to_numpy(),
-                                                                     compressed_metrics['X'].to_numpy()),
-            'sv_wd_random': Experiment.compute_wasserstein_distance(base_metrics['shap_sv'], random_metrics['shap_sv']),
-            'sv_wd_compressed': Experiment.compute_wasserstein_distance(base_metrics['shap_sv'],
-                                                                        compressed_metrics['shap_sv']),
+                                                                     compressed_metrics['X'].to_numpy())
         })
+
+        if "shap_sv" in base_metrics:
+            next_row.update({'sv_wd_random': Experiment.compute_wasserstein_distance(base_metrics['shap_sv'],
+                                                                                     random_metrics['shap_sv']),
+                             'sv_wd_compressed': Experiment.compute_wasserstein_distance(base_metrics['shap_sv'],
+                                                                                         compressed_metrics['shap_sv'])
+                             })
 
         new_row = pd.DataFrame(next_row, index=[seed])
         df_longer = pd.concat([df, new_row])
@@ -243,11 +266,11 @@ class Experiment:
                 unique=True
             )
 
-            ids_compressed = self.__timeit(fun=compress.compress, params=[X.to_numpy()],
-                                           named_params={'halve': f_halve, 'g': compress_oversampling},
-                                           name='compression_time')
-            ids_random = self.__timeit(fun=np.random.choice, params=[X.shape[0]],
-                                       named_params={'size': len(ids_compressed), 'replace': False}, name='random_time')
+            ids_compressed = self.__timeit(fun=compress.compress, args=[X.to_numpy()],
+                                           kwargs={'halve': f_halve, 'g': compress_oversampling},
+                                           name='kt')
+            ids_random = self.__timeit(fun=np.random.choice, args=[X.shape[0]],
+                                       kwargs={'size': len(ids_compressed), 'replace': False}, name='random')
 
             X_compressed, y_compressed = X.iloc[ids_compressed], y.iloc[ids_compressed]
             X_random, y_random = X.iloc[ids_random], y.iloc[ids_random]
