@@ -10,8 +10,10 @@ VERBOSE = False
 
 
 def experiment_1(no_tests=5, save_path='./results/exp_big_XGBoost.parquet', model_metric='accuracy'):
-    X = pd.read_csv("data/HIGGS.csv")
-    data_processor = DataProcessor(X=X[0], y=X[1:])
+
+    X = pd.read_csv('data/covtype.csv')
+    data_processor = DataProcessor(X=X.iloc[:,:10], y=X.iloc[:,-1])
+    
 
     experiment_settings = {
         'data_processor': data_processor,
@@ -33,8 +35,8 @@ def experiment_1(no_tests=5, save_path='./results/exp_big_XGBoost.parquet', mode
 
 
 def experiment_2(no_tests=5, save_path='./results/exp_big_KNN.parquet', model_metric='accuracy'):
-    X = pd.read_csv("data/HIGGS.csv")
-    data_processor = DataProcessor(X=X[0], y=X[1:])
+    X = pd.read_csv('./data/covtype.csv')
+    data_processor = DataProcessor(X=X.loc[:,:10], y=X.loc[:,-1])
 
     experiment_settings = {
         'data_processor': data_processor,
