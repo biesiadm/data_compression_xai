@@ -72,7 +72,7 @@ def experiment_3(no_tests=5, save_path='./results/exp_big_shap_XGBoost.parquet',
     
     experiment = Experiment(**experiment_settings)
     result = experiment.run(no_tests, Experiment.kernel_gaussian, save_path=save_path,
-                            test_size=4 ** 8, model_metric=model_metric)
+                            test_size=4 ** 9, model_metric=model_metric)
 
     return result
 
@@ -94,7 +94,7 @@ def experiment_4(no_tests=5, save_path='./results/exp_big_shap_knn.parquet', mod
     
     experiment = Experiment(**experiment_settings)
     result = experiment.run(no_tests, Experiment.kernel_gaussian, save_path=save_path,
-                            test_size=4 ** 8, model_metric=model_metric)
+                            test_size=4 ** 9, model_metric=model_metric)
 
     return result
 
