@@ -253,8 +253,9 @@ class Experiment:
         return df_longer
 
     def run(self, no_tests, kernel, no_halving_rounds=1, compress_oversampling=0,
-            test_size=4 ** 7, save_path=None, model_metric='accuracy'):
-        X, y = self.data_processor.X_test.iloc[0:test_size, :], self.data_processor.y_test.iloc[0:test_size]
+            save_path=None, model_metric='accuracy'):
+        X, y = self.data_processor.X_test, self.data_processor.y_test
+        # X, y = self.data_processor.X_test.iloc[0:test_size, :], self.data_processor.y_test.iloc[0:test_size]
         # X = X.reset_index(drop=True)
         # y = y.reset_index(drop=True)
         exp_results = pd.DataFrame()
@@ -293,7 +294,6 @@ class Experiment:
                 seed=seed,
                 model_metric=model_metric
             )
-            print('after compressing')
 
         if save_path is not None:
             exp_results.to_parquet(save_path)
