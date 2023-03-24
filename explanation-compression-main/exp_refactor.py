@@ -9,10 +9,10 @@ from exp_utils import DataProcessor, Experiment
 VERBOSE = False
 
 
-
-def experiment_1(no_tests=10, save_path='./results/exp1_diabetes.parquet', model_metric='r2'):
+def experiment_1(no_tests=10, test_size=4 ** 3,
+                 save_path='./results/exp1_diabetes.parquet', model_metric='r2'):
     X, y = load_diabetes(return_X_y=True)
-    data_processor = DataProcessor(X=X, y=y)
+    data_processor = DataProcessor(X=X, y=y, test_size=test_size)
 
     experiment_settings = {
         'data_processor': data_processor,
@@ -29,15 +29,16 @@ def experiment_1(no_tests=10, save_path='./results/exp1_diabetes.parquet', model
     }
 
     experiment = Experiment(**experiment_settings)
-    result = experiment.run(no_tests, Experiment.kernel_polynomial, save_path=save_path,
-                            test_size=4 ** 3, model_metric=model_metric)
+    result = experiment.run(no_tests, Experiment.kernel_polynomial,
+                            save_path=save_path, model_metric=model_metric)
 
     return result
 
 
-def experiment_3(no_tests=10, save_path='./results/exp3_bank.parquet', model_metric='accuracy'):
+def experiment_3(no_tests=10, test_size=4 ** 7,
+                 save_path='./results/exp3_bank.parquet', model_metric='accuracy'):
     data = pd.read_csv("data/bank-clean.csv")
-    data_processor = DataProcessor(df=data, target='y_yes')
+    data_processor = DataProcessor(df=data, target='y_yes', test_size=test_size)
 
     experiment_settings = {
         'data_processor': data_processor,
@@ -56,14 +57,15 @@ def experiment_3(no_tests=10, save_path='./results/exp3_bank.parquet', model_met
 
     experiment = Experiment(**experiment_settings)
     result = experiment.run(no_tests, Experiment.kernel_polynomial,
-                            save_path=save_path, test_size=4 ** 7, model_metric=model_metric)
+                            save_path=save_path, model_metric=model_metric)
 
     return result
 
 
-def experiment_4(no_tests=10, save_path='./results/expFriedman_xgb.parquet', model_metric='r2'):
+def experiment_4(no_tests=10, test_size=4 ** 7,
+                 save_path='./results/expFriedman_xgb.parquet', model_metric='r2'):
     X, y = make_friedman1(n_samples=45000, noise=0.1)
-    data_processor = DataProcessor(X=X, y=y)
+    data_processor = DataProcessor(X=X, y=y, test_size=test_size)
 
     experiment_settings = {
         'data_processor': data_processor,
@@ -81,13 +83,16 @@ def experiment_4(no_tests=10, save_path='./results/expFriedman_xgb.parquet', mod
 
     experiment = Experiment(**experiment_settings)
     result = experiment.run(no_tests, Experiment.kernel_gaussian,
-                            save_path=save_path, test_size=4 ** 7, model_metric=model_metric)
+                            save_path=save_path, model_metric=model_metric)
 
     return result
 
-def experiment_5(no_tests=10, save_path='./explanation-compression-main/results/exp_bank_knn.parquet', model_metric='accuracy'):
+
+def experiment_5(no_tests=10, test_size=4 ** 4,
+                 save_path='./explanation-compression-main/results/exp_bank_knn.parquet',
+                 model_metric='accuracy'):
     data = pd.read_csv("./explanation-compression-main/data/bank-clean.csv")
-    data_processor = DataProcessor(df=data, target='y_yes')
+    data_processor = DataProcessor(df=data, target='y_yes', test_size=test_size)
 
     experiment_settings = {
         'data_processor': data_processor,
@@ -104,14 +109,16 @@ def experiment_5(no_tests=10, save_path='./explanation-compression-main/results/
     }
 
     experiment = Experiment(**experiment_settings)
-    result = experiment.run(no_tests, Experiment.kernel_gaussian, save_path=save_path,
-                            test_size=4 ** 4, model_metric=model_metric)
+    result = experiment.run(no_tests, Experiment.kernel_gaussian,
+                            save_path=save_path, model_metric=model_metric)
 
     return result
 
-def experiment_6(no_tests=10, save_path='./explanation-compression-main/results/exp_breast_cancer.parquet', model_metric='accuracy'):
+
+def experiment_6(no_tests=10, test_size=4 ** 3,
+                 save_path='./explanation-compression-main/results/exp_breast_cancer.parquet', model_metric='accuracy'):
     X, y = load_breast_cancer(return_X_y=True)
-    data_processor = DataProcessor(X=X, y=y)
+    data_processor = DataProcessor(X=X, y=y, test_size=test_size)
 
     experiment_settings = {
         'data_processor': data_processor,
@@ -129,17 +136,14 @@ def experiment_6(no_tests=10, save_path='./explanation-compression-main/results/
 
     experiment = Experiment(**experiment_settings)
     result = experiment.run(no_tests, Experiment.kernel_polynomial, save_path=save_path,
-                            test_size=4 ** 3, model_metric=model_metric)
+                            model_metric=model_metric)
 
     return result
 
 
-
 experiments = [
-    experiment_6
-    
-
+    experiment_3
 ]
 
 for exp in experiments:
-    print('final:',exp())
+    print('final:', exp())

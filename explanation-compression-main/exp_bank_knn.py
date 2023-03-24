@@ -1,4 +1,4 @@
-iimport pandas as pd
+import pandas as pd
 import shap
 import dalex as dx
 
@@ -29,11 +29,3 @@ def experiment_5(no_tests=30, save_path='./explanation-compression-main/results/
                             test_size=4 ** 7, model_metric=model_metric)
 
     return result
-
-experiments = [
-    experiment_5
-
-]
-
-for exp in experiments:
-    print('final:',exp())
