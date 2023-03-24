@@ -13,4 +13,4 @@ source /home2/faculty/pkaczynska/.bashrc
 source /raid/shared/mair/miniconda3/etc/profile.d/conda.sh
 cd ./repo/data_compression_xai/explanation-compression-main
 conda activate exp7_env
-python3 exp_big.py
+python3 experiments/exp_big.py

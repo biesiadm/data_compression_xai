@@ -12,4 +12,4 @@
 source /home/as406153/.bashrc
 source /home/as406153/anaconda3/etc/profile.d/conda.sh
 conda activate exp7_env
-python3 exp_bank_knn.py
+python3 experiments/exp_bank_knn.py
